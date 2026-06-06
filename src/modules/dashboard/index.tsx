@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { CalendarPlus, LoaderCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../contexts/AuthContext';
@@ -21,6 +22,11 @@ import {
   HeaderContextLabel,
   HeaderContextNote,
   AulaSelect,
+  DashboardState,
+  DashboardStateIcon,
+  DashboardStateTitle,
+  DashboardStateDescription,
+  DashboardStateButton,
 } from './styles';
 import type { DashboardData } from './types';
 
@@ -179,6 +185,52 @@ export function Dashboard() {
       </HeaderContextNote>
     </HeaderContext>
   );
+
+  if (loadingDashboard) {
+    return (
+      <Page>
+        <DashboardState>
+          <DashboardStateIcon>
+            <LoaderCircle size={28} className="dashboard-state-spinner" />
+          </DashboardStateIcon>
+          <DashboardStateTitle>Carregando seu dashboard</DashboardStateTitle>
+          <DashboardStateDescription>
+            Estamos buscando suas turmas e aulas.
+          </DashboardStateDescription>
+        </DashboardState>
+      </Page>
+    );
+  }
+
+  if (aulaOptions.length === 0) {
+    return (
+      <Page>
+        <DashboardHeader
+          data={dashboardData.header}
+          onStartProcess={handleTurmasNavigation}
+        />
+
+        <DashboardState>
+          <DashboardStateIcon>
+            <CalendarPlus size={28} />
+          </DashboardStateIcon>
+          <DashboardStateTitle>
+            {loadError ? 'Não foi possível carregar as aulas' : 'Nenhuma aula disponível'}
+          </DashboardStateTitle>
+          <DashboardStateDescription>
+            {loadError
+              ? loadError
+              : selectedTurmaId
+                ? 'Sua turma já está cadastrada, mas ainda não possui aulas. Cadastre uma aula para começar a acompanhar presenças.'
+                : 'Cadastre uma turma e sua primeira aula para começar a usar o dashboard.'}
+          </DashboardStateDescription>
+          <DashboardStateButton type="button" onClick={handleTurmasNavigation}>
+            Ir para turmas
+          </DashboardStateButton>
+        </DashboardState>
+      </Page>
+    );
+  }
 
   return (
     <Page>

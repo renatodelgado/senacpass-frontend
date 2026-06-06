@@ -11,6 +11,60 @@ export const Page = styled.div`
   padding-bottom: 24px;
 `;
 
+export const DashboardState = styled.section`
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 24px;
+  text-align: center;
+  background: #ffffff;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 18px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.05);
+
+  .dashboard-state-spinner {
+    animation: ${keyframes`
+      to {
+        transform: rotate(360deg);
+      }
+    `} 0.9s linear infinite;
+  }
+`;
+
+export const DashboardStateIcon = styled.div`
+  width: 58px;
+  height: 58px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: ${theme.colors.primary};
+  background: rgba(30, 107, 214, 0.1);
+  border-radius: 18px;
+`;
+
+export const DashboardStateTitle = styled.h2`
+  color: ${theme.colors.text};
+  font-size: 1.25rem;
+`;
+
+export const DashboardStateDescription = styled.p`
+  max-width: 560px;
+  color: ${theme.colors.muted};
+  line-height: 1.6;
+`;
+
+export const DashboardStateButton = styled.button`
+  margin-top: 8px;
+  padding: 11px 18px;
+  color: #ffffff;
+  background: ${theme.colors.primary};
+  border-radius: 10px;
+  font-weight: 700;
+`;
+
 export const HeaderRow = styled.div`
   display: flex;
   align-items: flex-start;
