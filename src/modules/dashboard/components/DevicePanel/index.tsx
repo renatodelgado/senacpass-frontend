@@ -2,10 +2,11 @@ import { Cpu, Server, Activity } from 'lucide-react';
 import { Panel, DeviceHeader, DeviceIcon, DeviceTitle } from './styles';
 import { StatsGrid, StatCard, StatLabel, StatValue } from '../CourseOverviewCard/styles';
 import { EmptyState } from '../../../../components/ui/EmptyState';
-import type { DevicePanelData } from '../../types';
+import type { DeviceActionData, DevicePanelData } from '../../types';
 
 interface Props {
   data: DevicePanelData;
+  onAction?: (action: DeviceActionData) => void;
 }
 
 export function DevicePanel({ data }: Props) {
