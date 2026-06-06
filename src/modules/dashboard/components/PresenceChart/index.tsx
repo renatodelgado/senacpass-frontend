@@ -1,6 +1,5 @@
 import { XAxis, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import type { PresenceChartData } from '../../types';
-import { EmptyState } from '../../../../components/ui/EmptyState';
 
 import {
   ChartHeader,
@@ -15,7 +14,6 @@ interface Props {
 }
 
 export function PresenceChart({ data }: Props) {
-  const hasData = data.data.length > 0;
 
   return (
     <ChartWrap>
@@ -26,7 +24,6 @@ export function PresenceChart({ data }: Props) {
         </ChartLegend>
       </ChartHeader>
 
-      {hasData ? (
         <ResponsiveContainer width="100%" height={250}>
           <AreaChart data={data.data}>
             <defs>
@@ -48,12 +45,6 @@ export function PresenceChart({ data }: Props) {
             />
           </AreaChart>
         </ResponsiveContainer>
-      ) : (
-        <EmptyState
-          title="Sem dados de presença"
-          description="Quando a API retornar presenças, o gráfico será exibido automaticamente."
-        />
-      )}
     </ChartWrap>
   );
 }

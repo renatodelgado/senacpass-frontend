@@ -12,10 +12,10 @@ import {
   publicApi,
   protectedApi,
   type Aula,
-  type InscricaoTurma,
   type LogAcesso,
   type Presenca,
   type Turma,
+  type UnidadeCurricular,
 } from './resources';
 
 export interface AulaOption {
@@ -130,11 +130,6 @@ function alertTone(text?: string): Alert['type'] {
   return 'success';
 }
 
-function getLatestPresenceForAluno(presencas: Presenca[], idAluno: string) {
-  return [...presencas]
-    .filter((presence) => presence.aluno.id_aluno === idAluno)
-    .sort((left, right) => new Date(right.horario_checkin).getTime() - new Date(left.horario_checkin).getTime())[0];
-}
 
 function getSelectedAula(aulas: Aula[], selectedAulaId?: string) {
   if (selectedAulaId) {
@@ -203,23 +198,19 @@ function buildAlerts(presencas: Presenca[]): AlertsPanelData {
   };
 }
 
-function buildStudentList(inscricoes: InscricaoTurma[], presencas: Presenca[]): StudentListData {
-  const items = inscricoes.map((inscricao, index) => {
-    const presence = getLatestPresenceForAluno(presencas, inscricao.aluno.id_aluno);
-
-    return {
-      id: index + 1,
-      name: inscricao.aluno.nome,
-      avatar: `https://i.pravatar.cc/150?u=${inscricao.aluno.id_aluno}`,
-      registration: inscricao.aluno.matricula_institucional,
-      entry: presence ? formatTime(presence.horario_checkin) : '--:--',
-      permanence: presence ? formatMinutes(presence.tempo_permanencia_minutos) : '0m',
-      status: presence ? presenceStatusLabel(presence.status) : 'Ausente',
-    };
-  });
+function buildStudentList(presencas: Presenca[]): StudentListData {
+  const items = presencas.map((presenca, index) => ({
+    id: index + 1,
+    name: presenca.aluno.nome,
+    avatar: `https://i.pravatar.cc/150?u=${presenca.aluno.id_aluno}`,
+    registration: presenca.aluno.matricula_institucional,
+    entry: formatTime(presenca.horario_checkin),
+    permanence: formatMinutes(presenca.tempo_permanencia_minutos),
+    status: presenceStatusLabel(presenca.status),
+  }));
 
   return {
-    title: 'Lista da turma',
+    title: 'Lista de presença da aula',
     searchPlaceholder: 'Buscar aluno...',
     filterLabel: 'Todos os status',
     filterOptions: ['Todos os status', 'Presente', 'Parcial', 'Ausente'],
@@ -243,28 +234,39 @@ function buildStudentList(inscricoes: InscricaoTurma[], presencas: Presenca[]): 
   };
 }
 
-function buildPresenceChart(presencas: Presenca[]): PresenceChartData {
+function buildPresenceChart(aulas: Aula[], todasPresencas: Presenca[]): PresenceChartData {
+  const ultimasAulas = [...aulas]
+    .sort((left, right) => new Date(left.data_aula).getTime() - new Date(right.data_aula).getTime())
+    .slice(-8);
+
+  const data = ultimasAulas.map((aula) => {
+    const presencasDaAula = todasPresencas.filter(p => p.aula.id_aula === aula.id_aula);
+    const totalPresentes = presencasDaAula.filter(p => p.status?.toUpperCase().includes('PRES')).length;
+
+    return {
+      time: formatDate(aula.data_aula),
+      value: totalPresentes,
+    };
+  });
+
   return {
-    title: 'Presença por período',
-    legendLabel: 'Tempo de permanência',
-    data: [...presencas]
-      .sort((left, right) => new Date(left.horario_checkin).getTime() - new Date(right.horario_checkin).getTime())
-      .slice(-8)
-      .map((presence) => ({
-        time: formatTime(presence.horario_checkin),
-        value: Math.max(0, presence.tempo_permanencia_minutos),
-      })),
+    title: 'Presença por aula',
+    legendLabel: 'Total de presentes',
+    data,
   };
 }
 
-function buildCourseOverview(turma: Turma, aula: Aula, presencas: Presenca[], inscricoes: InscricaoTurma[]): CourseOverviewData {
-  const totalAlunos = inscricoes.length;
+function buildCourseOverview(turma: Turma, aula: Aula, presencas: Presenca[], ucDetalhes: UnidadeCurricular | null): CourseOverviewData {
+  const totalAlunos = presencas.length;
   const totalPresentes = presencas.filter((presence) => presence.status?.toUpperCase().includes('PRES')).length;
   const presencePercent = totalAlunos > 0 ? Math.round((totalPresentes / totalAlunos) * 100) : 0;
   const aulaStatus = aula.status?.toUpperCase() === 'EM_ANDAMENTO' ? 'Em andamento' : aula.status || 'Selecionada';
 
+  const nomeUc = ucDetalhes?.nome || turma.unidade_curricular.nome;
+  const cargaHorariaTxt = ucDetalhes?.carga_horaria ? ` • CH: ${ucDetalhes.carga_horaria}h` : '';
+
   return {
-    title: `${turma.unidade_curricular.nome} • ${turma.codigo_turma}`,
+    title: `${nomeUc} • ${turma.codigo_turma}${cargaHorariaTxt}`,
     subtitle: `${turma.professor.nome} • ${aulaStatus}`,
     scheduleLabel: 'Horário',
     scheduleValue: `${formatDate(aula.data_aula)} • ${formatTime(aula.horario_inicio_previsto)} - ${formatTime(aula.horario_fim_previsto)}`,
@@ -289,21 +291,17 @@ function buildDevicePanel(aula: Aula): DevicePanelData {
 
   if (!device) {
     return {
-      title: 'Nenhum dispositivo vinculado',
-      description: 'Esta aula ainda não possui um dispositivo fixo associado.',
+      title: 'Nenhum dispositivo',
+      description: '', // Vazio para disparar o EmptyState
       actions: [],
     };
   }
 
   return {
-    title: `Dispositivo da ${device.localizacao}`,
-    description: `${device.id_hardware} • ${device.ip} • ${device.status}`,
-    actions: [
-      { label: 'Reiniciar sensor', icon: 'refresh' },
-      { label: 'Forçar sincronia', icon: 'sync' },
-      { label: 'Encerrar check-in', icon: 'lock', danger: true },
-      { label: 'Reabrir manual', icon: 'unlock' },
-    ],
+    title: `Dispositivo ${device.id_hardware || 'Hardware'}`,
+    // Passamos os dados limpos, sem formatação difícil de separar
+    description: `${device.id_dispositivo}|${device.status}`,
+    actions: [],
   };
 }
 
@@ -325,15 +323,15 @@ function buildAuditPanel(logs: LogAcesso[]): AuditPanelData {
 }
 
 export async function loadDashboardData({ professorId, turmaId, selectedAulaId }: DashboardLoadInput): Promise<DashboardLoadResult> {
-  const [turmas, activeAulas, logs, presencas] = await Promise.all([
-    protectedApi.listTurmasByProfessor(professorId).catch(() => [] as Turma[]),
-    protectedApi.listAulasAtivasByProfessor(professorId).catch(() => [] as Aula[]),
-    publicApi.listAcessoLogs().catch(() => [] as LogAcesso[]),
-    publicApi.listPresencas().catch(() => [] as Presenca[]),
-  ]);
+  const [turmas, activeAulas, logs, todasPresencas] = await Promise.all([
+  protectedApi.listTurmasByProfessor(professorId).catch(() => [] as Turma[]),
+  protectedApi.listAulasAtivasByProfessor(professorId).catch(() => [] as Aula[]),
+  publicApi.listAcessoLogs().catch(() => [] as LogAcesso[]),
+  protectedApi.listPresencas().catch(() => [] as Presenca[]), // Voltou!
+]);
 
-  console.log('DADOS DO DASHBOARD:', { 
-    turmasRecebidas: turmas, 
+  console.log('DADOS DO DASHBOARD:', {
+    turmasRecebidas: turmas,
     aulasAtivasRecebidas: activeAulas,
     professorIdUsado: professorId
   });
@@ -341,7 +339,6 @@ export async function loadDashboardData({ professorId, turmaId, selectedAulaId }
   const safeTurmas = Array.isArray(turmas) ? turmas : [];
   const safeActiveAulas = Array.isArray(activeAulas) ? activeAulas : [];
   const safeLogs = Array.isArray(logs) ? logs : [];
-  const safePresencas = Array.isArray(presencas) ? presencas : [];
 
   console.log('DEBUG 1 - Aulas ativas que chegaram da API:', activeAulas);
   console.log('DEBUG 2 - Lista segura de aulas ativas:', safeActiveAulas);
@@ -358,6 +355,10 @@ export async function loadDashboardData({ professorId, turmaId, selectedAulaId }
     };
   }
 
+  const ucDetalhes = await protectedApi
+    .getUnidadeCurricularById(turma.unidade_curricular.id_unidade_curricular)
+    .catch(() => null);
+
   const aulasDaTurma = await protectedApi.listAulasByTurma(turma.id_turma).catch(() => [] as Aula[]);
   const safeAulasDaTurma = Array.isArray(aulasDaTurma) ? aulasDaTurma : [];
   const selectedAula = getSelectedAula(safeAulasDaTurma, selectedAulaId);
@@ -371,8 +372,7 @@ export async function loadDashboardData({ professorId, turmaId, selectedAulaId }
     };
   }
 
-  const selectedPresencas = safePresencas.filter((presence) => presence.aula.id_aula === selectedAula.id_aula);
-  const selectedInscricoes = await protectedApi.listInscricoesByTurma(turma.id_turma).catch(() => [] as InscricaoTurma[]);
+  const selectedPresencas = await protectedApi.listPresencasByAula(selectedAula.id_aula).catch(() => [] as Presenca[]);
   const selectedLogs = selectedAula.dispositivo
     ? safeLogs.filter((log) => log?.dispositivo?.id_dispositivo === selectedAula.dispositivo?.id_dispositivo)
     : safeLogs;
@@ -383,11 +383,10 @@ export async function loadDashboardData({ professorId, turmaId, selectedAulaId }
       title: `${turma.unidade_curricular.nome} • ${turma.codigo_turma}`,
       actionLabel: 'Turmas',
     },
-    courseOverview: buildCourseOverview(turma, selectedAula, selectedPresencas, selectedInscricoes),
-    devicePanel: buildDevicePanel(selectedAula),
+    courseOverview: buildCourseOverview(turma, selectedAula, [], ucDetalhes),
     alertsPanel: buildAlerts(selectedPresencas),
-    studentList: buildStudentList(selectedInscricoes, selectedPresencas),
-    presenceChart: buildPresenceChart(selectedPresencas),
+    studentList: buildStudentList(selectedPresencas),
+    presenceChart: buildPresenceChart(safeAulasDaTurma, todasPresencas),
     auditPanel: buildAuditPanel(selectedLogs),
     summaryCards: [
       {
@@ -397,8 +396,8 @@ export async function loadDashboardData({ professorId, turmaId, selectedAulaId }
       },
       {
         title: 'Alunos inscritos',
-        value: String(selectedInscricoes.length),
-        subtitle: selectedInscricoes.length > 0 ? 'Lista da turma selecionada' : 'Não há dados no momento',
+        value: String(selectedPresencas.length),
+        subtitle: selectedPresencas.length > 0 ? 'Lista da turma selecionada' : 'Não há dados no momento',
       },
       {
         title: 'Leituras RFID',
@@ -406,6 +405,7 @@ export async function loadDashboardData({ professorId, turmaId, selectedAulaId }
         subtitle: selectedLogs.length > 0 ? 'Eventos vinculados ao dispositivo' : 'Não há dados no momento',
       },
     ],
+    devicePanel: buildDevicePanel(selectedAula),
   };
 
   return {

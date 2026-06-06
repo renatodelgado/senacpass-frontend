@@ -1,55 +1,53 @@
-import type { DeviceActionData, DevicePanelData } from '../../types';
+import { Cpu, Server, Activity } from 'lucide-react';
+import { Panel, DeviceHeader, DeviceIcon, DeviceTitle } from './styles';
+import { StatsGrid, StatCard, StatLabel, StatValue } from '../CourseOverviewCard/styles';
 import { EmptyState } from '../../../../components/ui/EmptyState';
-import { DeviceAction, DeviceActions, DeviceDescription, DeviceHeader, DeviceIcon, DeviceTitle, Divider, Panel } from './styles';
-import { Cpu, RefreshCcw, Shuffle, LockKeyhole, Unlock } from 'lucide-react';
+import type { DevicePanelData } from '../../types';
 
 interface Props {
   data: DevicePanelData;
-  onAction?: (action: DeviceActionData) => void;
 }
 
-export function DevicePanel({ data, onAction }: Props) {
+export function DevicePanel({ data }: Props) {
+  if (!data.description) {
+    return (
+      <Panel>
+        <EmptyState title={data.title} description="Nenhum dispositivo disponível." />
+      </Panel>
+    );
+  }
+
+  // Divisão segura
+  const [deviceId, status] = data.description.split('|');
+
   return (
     <Panel>
       <DeviceHeader>
         <DeviceIcon>
           <Cpu size={16} />
         </DeviceIcon>
-
-        <div>
-          <DeviceTitle>{data.title}</DeviceTitle>
-          <DeviceDescription>{data.description}</DeviceDescription>
-        </div>
+        <DeviceTitle>{data.title}</DeviceTitle>
       </DeviceHeader>
 
-      <Divider />
+      <StatsGrid style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+        <StatCard>
+          <StatLabel>
+            <Server size={12} style={{ display: 'inline', marginRight: 6 }} />
+            ID do Hardware
+          </StatLabel>
+          <StatValue style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
+            {deviceId || 'N/A'}
+          </StatValue>
+        </StatCard>
 
-      {data.actions.length === 0 ? (
-        <EmptyState
-          title="Nenhum dispositivo vinculado"
-          description="Assim que houver dispositivos cadastrados, as ações de manutenção aparecem aqui."
-        />
-      ) : (
-        <DeviceActions>
-          {data.actions.map(({ label, icon, danger }) => {
-            const Icon =
-              icon === 'refresh'
-                ? RefreshCcw
-                : icon === 'sync'
-                ? Shuffle
-                : icon === 'lock'
-                ? LockKeyhole
-                : Unlock;
-
-            return (
-              <DeviceAction key={label} type="button" danger={danger} onClick={() => onAction?.({ label, icon, danger })}>
-                <Icon size={18} />
-                <span>{label}</span>
-              </DeviceAction>
-            );
-          })}
-        </DeviceActions>
-      )}
+        <StatCard>
+          <StatLabel>
+            <Activity size={12} style={{ display: 'inline', marginRight: 6 }} />
+            Status
+          </StatLabel>
+          <StatValue>{status || 'Indeterminado'}</StatValue>
+        </StatCard>
+      </StatsGrid>
     </Panel>
   );
 }

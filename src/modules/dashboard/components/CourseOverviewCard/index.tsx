@@ -26,7 +26,7 @@ interface Props {
 }
 
 export function CourseOverviewCard({ data }: Props) {
-  const isEmpty = data.title.startsWith('Não há') || data.presenceValue === 'Não há dados no momento';
+  const isEmpty = data.title.startsWith('Não há');
 
   return (
     <CourseCard>

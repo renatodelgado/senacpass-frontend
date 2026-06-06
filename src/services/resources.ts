@@ -171,4 +171,9 @@ export const protectedApi = {
   updateDispositivo: (id: string | number, data: Partial<Dispositivo>) =>
     request<Dispositivo>('put', `/dispositivos/${id}`, data),
   deleteDispositivo: (id: string | number) => request<void>('delete', `/dispositivos/${id}`),
+
+  listPresencasByAula: (idAula: string | number) => 
+    request<Presenca[]>('get', `/presencas/aula/${idAula}`),
+
+  listPresencas: () => request<Presenca[]>('get', '/presencas'),
 };
