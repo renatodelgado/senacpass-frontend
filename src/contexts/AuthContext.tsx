@@ -66,14 +66,27 @@ async function login(credentials: LoginCredentials) {
 
       const decodedToken = JSON.parse(jsonPayload);
 
-      // Agora criamos o usuário com os dados extraídos de dentro do Token!
+      localStorage.setItem('token', token);
+
+      let professorName = decodedToken.name;
+      let professorEmail = decodedToken.email || credentials.email;
+
+      if (!professorName && decodedToken.id) {
+        try {
+          const professorResponse = await api.get(`/professores/${decodedToken.id}`);
+          professorName = professorResponse.data?.nome;
+          professorEmail = professorResponse.data?.email || professorEmail;
+        } catch {
+          professorName = 'Usuário';
+        }
+      }
+
       const loggedUser = {
-        id: decodedToken.id, // O uuid correto: f8ba4437-264d...
-        email: decodedToken.email || credentials.email,
-        name: decodedToken.name || 'Professor', // O nome não vem no token, usamos um fallback seguro
+        id: decodedToken.id,
+        email: professorEmail,
+        name: professorName || 'Usuário',
       };
 
-      localStorage.setItem('token', token);
       localStorage.setItem('@SenacPass:user', JSON.stringify(loggedUser));
 
       setUser(loggedUser);

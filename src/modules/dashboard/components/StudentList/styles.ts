@@ -164,6 +164,10 @@ export const Table = styled.table`
     text-align: left;
   }
 
+  th {
+    padding: 0;
+  }
+
   thead {
     background: #f8fafc;
     color: ${theme.colors.muted};
@@ -201,14 +205,6 @@ export const Table = styled.table`
 
   tbody tr:hover {
     background: rgba(248, 250, 252, 0.8);
-  }
-
-  tbody td:last-child button {
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
-    background: #f8fafc;
-    color: ${theme.colors.muted};
   }
 
   /* Use percentage widths so the table tries to fit the container
@@ -293,6 +289,68 @@ export const HeaderLabel = styled.span`
   padding: 12px 16px;
 `;
 
+export const RowActions = styled.div`
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+`;
+
+export const ActionButton = styled.button`
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: ${theme.colors.primary};
+
+  &:hover {
+    background: #dbeafe;
+  }
+`;
+
+export const ObservationDetails = styled.details`
+  position: relative;
+
+  summary {
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: #eff6ff;
+    color: ${theme.colors.primary};
+    cursor: pointer;
+    list-style: none;
+  }
+
+  summary::-webkit-details-marker {
+    display: none;
+  }
+
+  &[open] summary {
+    background: #dbeafe;
+  }
+`;
+
+export const ObservationText = styled.span`
+  position: absolute;
+  z-index: 12;
+  right: 0;
+  top: calc(100% + 6px);
+  width: min(260px, 70vw);
+  padding: 10px 12px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 10px;
+  background: #ffffff;
+  color: ${theme.colors.text};
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+  font-size: 0.82rem;
+  line-height: 1.45;
+`;
+
 export const Status = styled.span<{ status: string }>`
   display: inline-flex;
   align-items: center;
@@ -308,6 +366,8 @@ export const Status = styled.span<{ status: string }>`
       ? '#DCFCE7'
       : status === 'Parcial'
       ? '#FEF3C7'
+      : status === 'Justificado'
+      ? '#DBEAFE'
       : '#FEE2E2'};
 
   color: ${({ status }) =>
@@ -315,6 +375,8 @@ export const Status = styled.span<{ status: string }>`
       ? '#166534'
       : status === 'Parcial'
       ? '#B45309'
+      : status === 'Justificado'
+      ? '#1D4ED8'
       : '#991B1B'};
 `;
 

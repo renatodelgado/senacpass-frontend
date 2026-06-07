@@ -49,18 +49,9 @@ export const CourseMeta = styled.p`
   color: ${theme.colors.muted};
 `;
 
-export const GhostButton = styled.button`
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  background: #f8fafc;
-  color: ${theme.colors.muted};
-  flex-shrink: 0;
-`;
-
 export const StatsGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 
   @media (max-width: 768px) {
@@ -68,17 +59,40 @@ export const StatsGrid = styled.div`
   }
 `;
 
-export const StatCard = styled.div<{ accent?: boolean; wide?: boolean }>`
-  grid-column: ${({ wide }) => (wide ? 'span 2' : 'span 1')};
+export const StatCard = styled.div<{ accent?: boolean }>`
   min-height: 84px;
   padding: 14px;
   border-radius: 14px;
   background: ${({ accent }) => (accent ? 'linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%)' : '#f8fafc')};
   border: 1px solid ${({ accent }) => (accent ? 'rgba(30, 107, 214, 0.2)' : 'rgba(15, 23, 42, 0.06)')};
 
-  @media (max-width: 768px) {
-    grid-column: span 1;
+`;
+
+export const CourseDetails = styled.div`
+  margin-top: 12px;
+  padding: 11px 2px;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+`;
+
+export const CourseDetail = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: ${theme.colors.muted};
+  font-size: 0.84rem;
+
+  strong {
+    color: ${theme.colors.text};
   }
+`;
+
+export const PresenceSection = styled.div`
+  margin-top: 14px;
+  padding: 15px;
+  border: 1px solid rgba(30, 107, 214, 0.18);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
 `;
 
 export const StatLabel = styled.div`

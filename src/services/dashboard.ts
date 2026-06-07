@@ -190,12 +190,16 @@ function getCheckInTimestamp(presenca: Presenca) {
     : 0;
 }
 
-function presenceStatusLabel(presenca?: Presenca): 'Presente' | 'Parcial' | 'Ausente' {
+function presenceStatusLabel(presenca?: Presenca): 'Presente' | 'Parcial' | 'Ausente' | 'Justificado' {
+  const normalized = presenca?.status?.toUpperCase() || '';
+
+  if (normalized.includes('JUSTIFIC')) {
+    return 'Justificado';
+  }
+
   if (!hasCheckIn(presenca)) {
     return 'Ausente';
   }
-
-  const normalized = presenca?.status?.toUpperCase() || '';
 
   if (normalized.includes('PARC') || normalized.includes('ATR')) {
     return 'Parcial';
@@ -306,12 +310,14 @@ function buildStudentList(inscricoes: InscricaoTurma[], presencas: Presenca[]): 
 
     return {
     id: index + 1,
+    presenceId: presenca?.id_presenca,
     name: inscricao.aluno.nome,
     avatar: `https://i.pravatar.cc/150?u=${inscricao.aluno.id_aluno}`,
     registration: inscricao.aluno.matricula_institucional,
     entry: presenca ? formatTime(presenca.horario_checkin) : '--:--',
     permanence: presenca ? formatMinutes(presenca.tempo_permanencia_minutos) : '0m',
     status: presenceStatusLabel(presenca),
+    justification: presenca?.justificativa_manual || undefined,
     };
   });
 
@@ -319,11 +325,12 @@ function buildStudentList(inscricoes: InscricaoTurma[], presencas: Presenca[]): 
     title: 'Lista de presença da aula',
     searchPlaceholder: 'Buscar aluno...',
     filterLabel: 'Todos os status',
-    filterOptions: ['Todos os status', 'Presente', 'Parcial', 'Ausente'],
+    filterOptions: ['Todos os status', 'Presente', 'Parcial', 'Ausente', 'Justificado'],
     statusLegend: [
       { label: 'Presente', color: '#10B981' },
       { label: 'Parcial', color: '#F59E0B' },
       { label: 'Ausente', color: '#EF4444' },
+      { label: 'Justificado', color: '#2563EB' },
     ],
     columns: [
       { key: 'name', label: 'Aluno' },
@@ -395,16 +402,20 @@ function buildCourseOverview(
   const aulaStatus = aulaEmAndamento ? 'Em andamento' : aula.status || 'Selecionada';
 
   const nomeUc = ucDetalhes?.nome || turma.unidade_curricular.nome;
-  const cargaHorariaTxt = ucDetalhes?.carga_horaria ? ` • CH: ${ucDetalhes.carga_horaria}h` : '';
+  const cargaHoraria = ucDetalhes?.carga_horaria ?? turma.unidade_curricular.carga_horaria;
 
   return {
-    title: `${nomeUc} • ${turma.codigo_turma}${cargaHorariaTxt}`,
+    title: nomeUc,
     subtitle: `${turma.professor.nome} • ${aulaStatus}`,
-    scheduleLabel: 'Horário',
-    scheduleValue: `${formatDate(aula.data_aula)} • ${formatTime(aula.horario_inicio_previsto)} - ${formatTime(aula.horario_fim_previsto)}`,
+    dateLabel: 'Dia da aula',
+    dateValue: formatDate(aula.data_aula),
+    timeLabel: 'Horário',
+    timeValue: `${formatTime(aula.horario_inicio_previsto)} - ${formatTime(aula.horario_fim_previsto)}`,
     roomLabel: 'Sala',
     roomValue: aula.dispositivo?.localizacao || 'Não há dados no momento',
     roomIcon: 'building',
+    workloadLabel: 'Carga horária',
+    workloadValue: cargaHoraria ? `${cargaHoraria} horas` : 'Não informada',
     presenceLabel: aulaEmAndamento ? 'Presença atual' : 'Presença',
     presenceValue: totalAlunos > 0 ? `${totalPresentes} / ${totalAlunos} alunos` : 'Nenhum aluno inscrito',
     progress: presencePercent,
@@ -430,9 +441,8 @@ function buildDevicePanel(aula: Aula): DevicePanelData {
   }
 
   return {
-    title: `Dispositivo ${device.id_hardware || 'Hardware'}`,
-    // Passamos os dados limpos, sem formatação difícil de separar
-    description: `${device.id_dispositivo}|${device.status}`,
+    title: 'Dispositivo da sala',
+    description: `${device.id_hardware}|${device.status}`,
     actions: [],
   };
 }
@@ -517,8 +527,8 @@ export async function loadDashboardData({ professorId, turmaId, selectedAulaId }
 
   const dashboardData: DashboardData = {
     header: {
-      eyebrow: `${turma.professor.nome} • ${turma.professor.email}`,
-      title: `${turma.unidade_curricular.nome} • ${turma.codigo_turma}`,
+      eyebrow: turma.professor.nome,
+      title: 'Dashboard',
       actionLabel: 'Turmas',
     },
     courseOverview: buildCourseOverview(turma, selectedAula, safeInscricoes, selectedPresencas, ucDetalhes),
@@ -568,11 +578,15 @@ export const EMPTY_DASHBOARD_DATA: DashboardData = {
   courseOverview: {
     title: 'Não há dados no momento',
     subtitle: 'Não há dados no momento',
-    scheduleLabel: 'Horário',
-    scheduleValue: 'Não há dados no momento',
+    dateLabel: 'Dia da aula',
+    dateValue: 'Não há dados no momento',
+    timeLabel: 'Horário',
+    timeValue: 'Não há dados no momento',
     roomLabel: 'Sala',
     roomValue: 'Não há dados no momento',
     roomIcon: 'building',
+    workloadLabel: 'Carga horária',
+    workloadValue: 'Não há dados no momento',
     presenceLabel: 'Presença atual',
     presenceValue: 'Não há dados no momento',
     progress: 0,
@@ -597,11 +611,12 @@ export const EMPTY_DASHBOARD_DATA: DashboardData = {
     title: 'Lista da turma',
     searchPlaceholder: 'Buscar aluno...',
     filterLabel: 'Todos os status',
-    filterOptions: ['Todos os status', 'Presente', 'Parcial', 'Ausente'],
+    filterOptions: ['Todos os status', 'Presente', 'Parcial', 'Ausente', 'Justificado'],
     statusLegend: [
       { label: 'Presente', color: '#10B981' },
       { label: 'Parcial', color: '#F59E0B' },
       { label: 'Ausente', color: '#EF4444' },
+      { label: 'Justificado', color: '#2563EB' },
     ],
     columns: [
       { key: 'name', label: 'Aluno' },

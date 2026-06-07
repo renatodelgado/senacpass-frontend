@@ -39,7 +39,7 @@ export function Header() {
 
           <UserMeta>
             <UserName>{user?.name || 'Arnott R. Caiado'}</UserName>
-            <UserRole>Faculdade Senac Pernambuco</UserRole>
+            <UserRole>Dashboard</UserRole>
           </UserMeta>
 
           <ChevronDown size={16} strokeWidth={2.5} />

@@ -13,11 +13,15 @@ export interface DashboardHeaderData {
 export interface CourseOverviewData {
   title: string;
   subtitle: string;
-  scheduleLabel: string;
-  scheduleValue: string;
+  dateLabel: string;
+  dateValue: string;
+  timeLabel: string;
+  timeValue: string;
   roomLabel: string;
   roomValue: string;
   roomIcon: 'building';
+  workloadLabel: string;
+  workloadValue: string;
   presenceLabel: string;
   presenceValue: string;
   progress: number;
@@ -54,12 +58,14 @@ export interface AlertsPanelData {
 
 export interface Student {
   id: number;
+  presenceId?: string;
   name: string;
   avatar?: string;
   registration: string;
   entry: string;
   permanence: string;
-  status: 'Presente' | 'Parcial' | 'Ausente';
+  status: 'Presente' | 'Parcial' | 'Ausente' | 'Justificado';
+  justification?: string;
 }
 
 export interface StudentListData {

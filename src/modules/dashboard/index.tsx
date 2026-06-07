@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { CalendarPlus, LoaderCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../contexts/AuthContext';
 import { EMPTY_DASHBOARD_DATA, loadDashboardData, type AulaOption } from '../../services/dashboard';
+import { protectedApi } from '../../services/resources';
 
 import { DashboardHeader } from './components/DashboardHeader';
 import { CourseOverviewCard } from './components/CourseOverviewCard';
@@ -12,7 +13,8 @@ import { AuditPanel } from './components/AuditPanel';
 import { StudentList } from './components/StudentList';
 import { DevicePanel } from './components/DevicePanel';
 import { PresenceChart } from './components/PresenceChart';
-import type { DeviceActionData } from './types';
+import { DashboardModal } from './components/DashboardModal';
+import type { DeviceActionData, Student } from './types';
 import {
   Page,
   BalancedHeroGrid,
@@ -41,6 +43,10 @@ export function Dashboard() {
   const [loadingDashboard, setLoadingDashboard] = useState(true);
   const [refreshingDashboard, setRefreshingDashboard] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [studentToJustify, setStudentToJustify] = useState<Student | null>(null);
+  const [justification, setJustification] = useState('');
+  const [justificationError, setJustificationError] = useState<string | null>(null);
+  const [submittingJustification, setSubmittingJustification] = useState(false);
 
   function applyDashboardResult(result: Awaited<ReturnType<typeof loadDashboardData>>) {
     setDashboardData(result.dashboardData);
@@ -93,11 +99,6 @@ export function Dashboard() {
       isMounted = false;
     };
   }, [authLoading, professorId]);
-
-  const selectedAula = useMemo(
-    () => aulaOptions.find((option) => option.id === selectedAulaId),
-    [aulaOptions, selectedAulaId],
-  );
 
   function handleDeviceAction(action: DeviceActionData) {
     if (action.icon === 'refresh' || action.icon === 'sync') {
@@ -159,6 +160,54 @@ export function Dashboard() {
       });
   }
 
+  function handleOpenJustification(student: Student) {
+    if (!student.presenceId) {
+      return;
+    }
+
+    setStudentToJustify(student);
+    setJustification('');
+    setJustificationError(null);
+  }
+
+  function handleCloseJustification() {
+    if (submittingJustification) {
+      return;
+    }
+
+    setStudentToJustify(null);
+    setJustification('');
+    setJustificationError(null);
+  }
+
+  async function handleJustificationSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!studentToJustify?.presenceId || !user?.id || justification.trim().length < 3) {
+      return;
+    }
+
+    setSubmittingJustification(true);
+    setJustificationError(null);
+
+    try {
+      await protectedApi.justifyPresenca(studentToJustify.presenceId, justification.trim());
+      const result = await loadDashboardData({
+        professorId: user.id,
+        turmaId: selectedTurmaId || undefined,
+        selectedAulaId: selectedAulaId || undefined,
+      });
+      applyDashboardResult(result);
+      setStudentToJustify(null);
+      setJustification('');
+    } catch (error) {
+      console.error('Erro ao justificar presença:', error);
+      setJustificationError('Não foi possível salvar a justificativa. Tente novamente.');
+    } finally {
+      setSubmittingJustification(false);
+    }
+  }
+
   const rightSlot = (
     <HeaderContext>
       <HeaderContextLabel>Aula da turma</HeaderContextLabel>
@@ -180,9 +229,11 @@ export function Dashboard() {
         ))}
       </AulaSelect>
 
-      <HeaderContextNote>
-        {loadError || (refreshingDashboard ? 'Atualizando a visão da aula...' : selectedAula?.label || 'Selecione uma aula para ver a turma vinculada.')}
-      </HeaderContextNote>
+      {loadError || refreshingDashboard ? (
+        <HeaderContextNote>
+          {loadError || 'Atualizando a visão da aula...'}
+        </HeaderContextNote>
+      ) : null}
     </HeaderContext>
   );
 
@@ -234,7 +285,7 @@ export function Dashboard() {
 
   return (
     <Page>
-      <DashboardHeader data={dashboardData.header} onStartProcess={handleTurmasNavigation} rightSlot={rightSlot} />
+      <DashboardHeader data={dashboardData.header} rightSlot={rightSlot} />
 
       <BalancedHeroGrid>
         <CourseOverviewCard data={dashboardData.courseOverview} />
@@ -243,13 +294,24 @@ export function Dashboard() {
 
       <HeroGrid>
         <AlertsPanel data={dashboardData.alertsPanel} />
-        <StudentList data={dashboardData.studentList} />
+        <StudentList data={dashboardData.studentList} onJustify={handleOpenJustification} />
       </HeroGrid>
 
       <ChartAndAudit>
         <PresenceChart data={dashboardData.presenceChart} />
         <AuditPanel data={dashboardData.auditPanel} onStartProcess={handleTurmasNavigation} />
       </ChartAndAudit>
+
+      <DashboardModal
+        open={Boolean(studentToJustify)}
+        submitting={submittingJustification}
+        studentName={studentToJustify?.name || ''}
+        justification={justification}
+        error={justificationError}
+        onClose={handleCloseJustification}
+        onJustificationChange={setJustification}
+        onSubmit={handleJustificationSubmit}
+      />
     </Page>
   );
 }
