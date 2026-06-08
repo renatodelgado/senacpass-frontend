@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../../contexts/AuthContext';
 import { EMPTY_DASHBOARD_DATA, loadDashboardData, type AulaOption } from '../../services/dashboard';
-import { protectedApi } from '../../services/resources';
+import { protectedApi, publicApi } from '../../services/resources';
 
 import { DashboardHeader } from './components/DashboardHeader';
 import { CourseOverviewCard } from './components/CourseOverviewCard';
@@ -206,6 +206,27 @@ export function Dashboard() {
       }
 
       await protectedApi.justifyPresenca(presenceId, justification.trim());
+
+      try {
+        if (!studentToJustify.studentId) {
+          throw new Error('Aluno sem identificador para registrar o log.');
+        }
+
+        const aluno = await protectedApi.getAlunoById(studentToJustify.studentId);
+        await publicApi.createAcessoLog({
+          rfid_uid: aluno.rfid_uid,
+          tipo_evento: 'JUSTIFICATIVA_MANUAL',
+          data_hora: new Date().toISOString(),
+          id_aula: selectedAulaId,
+          justificativa: justification.trim(),
+        });
+      } catch (logError) {
+        console.warn(
+          'A justificativa foi salva, mas a API não aceitou o log de auditoria. O backend precisa permitir JUSTIFICATIVA_MANUAL.',
+          logError,
+        );
+      }
+
       const result = await loadDashboardData({
         professorId: user.id,
         turmaId: selectedTurmaId || undefined,

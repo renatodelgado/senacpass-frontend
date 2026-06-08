@@ -1,210 +1,636 @@
-import { Download, FileSpreadsheet, FileText, LineChart, Printer } from 'lucide-react';
+import {
+  Activity,
+  CalendarCheck,
+  Download,
+  FileText,
+  Printer,
+  RefreshCw,
+  Search,
+  Users,
+} from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { EmptyState } from '../../components/ui/EmptyState';
-import { publicApi, protectedApi } from '../../services/resources';
+import type {
+  Aluno,
+  Aula,
+  InscricaoTurma,
+  LogAcesso,
+  Presenca,
+  Turma,
+} from '../../services/resources';
+import { protectedApi, publicApi } from '../../services/resources';
 import {
-  Page,
-  Header,
-  Eyebrow,
-  Title,
-  Subtitle,
-  SummaryGrid,
-  SummaryCard,
-  SummaryLabel,
-  SummaryValue,
-  SummaryNote,
-  Actions,
   ActionButton,
+  Actions,
+  Control,
+  Controls,
+  ErrorMessage,
+  Eyebrow,
+  Header,
+  LogEvent,
+  LogList,
+  LogMeta,
+  LogRow,
+  Page,
+  PrintHeader,
+  Progress,
+  ProgressBar,
+  ReportMeta,
+  ReportPrintStyles,
+  SearchControl,
   Section,
+  SectionBadge,
   SectionHeader,
   SectionTitle,
-  SectionBadge,
-  TableWrap,
-  Table,
   Status,
+  Subtitle,
+  SummaryCard,
+  SummaryGrid,
+  SummaryLabel,
+  SummaryNote,
+  SummaryValue,
+  Table,
+  TableWrap,
+  Title,
+  ViewTabs,
+  ViewTab,
 } from './styles';
 
-type ReportRow = {
-  name: string;
-  type: string;
-  range: string;
-  owner: string;
-  status: string;
+type ViewMode = 'turma' | 'aluno';
+
+type ReportData = {
+  turmas: Turma[];
+  alunos: Aluno[];
+  aulas: Aula[];
+  inscricoes: InscricaoTurma[];
+  presencas: Presenca[];
+  logs: LogAcesso[];
 };
 
+type AttendanceStatus = 'Presente' | 'Parcial' | 'Justificado' | 'Ausente';
+
+const EMPTY_DATA: ReportData = {
+  turmas: [],
+  alunos: [],
+  aulas: [],
+  inscricoes: [],
+  presencas: [],
+  logs: [],
+};
+
+function dateKey(value: string) {
+  return value.match(/^\d{4}-\d{2}-\d{2}/)?.[0] || '';
+}
+
+function isPastOrToday(aula: Aula) {
+  const key = dateKey(aula.data_aula);
+  const today = new Date();
+  const todayKey = [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, '0'),
+    String(today.getDate()).padStart(2, '0'),
+  ].join('-');
+
+  return Boolean(key && key <= todayKey);
+}
+
+function formatDate(value: string) {
+  const key = dateKey(value);
+
+  if (key) {
+    const [year, month, day] = key.split('-');
+    return `${day}/${month}/${year}`;
+  }
+
+  return 'Data indisponível';
+}
+
+function formatDateTime(value: string) {
+  const date = new Date(value);
+
+  return Number.isNaN(date.getTime())
+    ? 'Data indisponível'
+    : date.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function formatTime(value: string | null) {
+  if (!value) {
+    return '--:--';
+  }
+
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? '--:--'
+    : date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function getAttendanceStatus(presenca?: Presenca): AttendanceStatus {
+  const status = presenca?.status?.toUpperCase() || '';
+
+  if (status.includes('JUSTIFIC')) {
+    return 'Justificado';
+  }
+
+  if (status.includes('PARC') || status.includes('ATRAS')) {
+    return 'Parcial';
+  }
+
+  if (presenca?.horario_checkin || status.includes('PRESENT')) {
+    return 'Presente';
+  }
+
+  return 'Ausente';
+}
+
+function eventLabel(event: string) {
+  const labels: Record<string, string> = {
+    RFID_LEITURA: 'Leitura RFID',
+    RFID_IGNORADO_SEM_AULA: 'Leitura sem aula',
+    JUSTIFICATIVA_MANUAL: 'Justificativa manual',
+  };
+
+  return labels[event] || event.replaceAll('_', ' ');
+}
+
 export function Relatorios() {
-  const [reportRows, setReportRows] = useState<ReportRow[]>([]);
+  const [data, setData] = useState<ReportData>(EMPTY_DATA);
+  const [viewMode, setViewMode] = useState<ViewMode>('turma');
+  const [selectedTurmaId, setSelectedTurmaId] = useState('');
+  const [selectedAlunoId, setSelectedAlunoId] = useState('');
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let isMounted = true;
+  async function loadReport() {
+    setLoading(true);
+    setError(null);
 
-    async function loadReports() {
-      const [logs, presencas, aulas, turmas, dispositivos] = await Promise.all([
-        publicApi.listAcessoLogs().catch(() => []),
-        publicApi.listPresencas().catch(() => []),
-        protectedApi.listAulas().catch(() => []),
-        protectedApi.listTurmas().catch(() => []),
-        protectedApi.listDispositivos().catch(() => []),
+    try {
+      const [turmas, alunos, aulas, inscricoes, presencas, logs] = await Promise.all([
+        protectedApi.listTurmas(),
+        protectedApi.listAlunos(),
+        protectedApi.listAulas(),
+        protectedApi.listInscricoesTurmas(),
+        protectedApi.listPresencas(),
+        publicApi.listAcessoLogs(),
       ]);
 
-      const rows = [
-        {
-          name: 'Log de acessos',
-          type: 'GET /api/log-acessos',
-          range: `${logs.length} registros`,
-          owner: 'Público',
-          status: logs.length > 0 ? 'Disponível' : 'Não há dados no momento',
-        },
-        {
-          name: 'Presenças',
-          type: 'GET /api/presencas',
-          range: `${presencas.length} registros`,
-          owner: 'Público',
-          status: presencas.length > 0 ? 'Disponível' : 'Não há dados no momento',
-        },
-        {
-          name: 'Aulas',
-          type: 'GET /api/aulas',
-          range: `${aulas.length} registros`,
-          owner: 'Protegida',
-          status: aulas.length > 0 ? 'Disponível' : 'Não há dados no momento',
-        },
-        {
-          name: 'Turmas',
-          type: 'GET /api/turmas',
-          range: `${turmas.length} registros`,
-          owner: 'Protegida',
-          status: turmas.length > 0 ? 'Disponível' : 'Não há dados no momento',
-        },
-        {
-          name: 'Dispositivos',
-          type: 'GET /api/dispositivos',
-          range: `${dispositivos.length} registros`,
-          owner: 'Protegida',
-          status: dispositivos.length > 0 ? 'Disponível' : 'Não há dados no momento',
-        },
-      ];
+      const nextData = {
+        turmas: Array.isArray(turmas) ? turmas : [],
+        alunos: Array.isArray(alunos) ? alunos : [],
+        aulas: Array.isArray(aulas) ? aulas : [],
+        inscricoes: Array.isArray(inscricoes) ? inscricoes : [],
+        presencas: Array.isArray(presencas) ? presencas : [],
+        logs: Array.isArray(logs) ? logs : [],
+      };
 
-      if (isMounted) {
-        setReportRows(rows);
-      }
+      setData(nextData);
+      setSelectedTurmaId((current) => current || nextData.turmas[0]?.id_turma || '');
+    } catch (loadError) {
+      console.error('Erro ao carregar os relatórios:', loadError);
+      setError('Não foi possível carregar os dados dos relatórios.');
+    } finally {
+      setLoading(false);
     }
+  }
 
-    void loadReports();
-
-    return () => {
-      isMounted = false;
-    };
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadReport();
   }, []);
 
-  const metrics = useMemo(
-    () => [
-      {
-        label: 'Seções prontas',
-        value: String(reportRows.filter((report) => report.status === 'Disponível').length),
-        note: reportRows.length > 0 ? 'Agrupadas pelos endpoints reais' : 'Não há dados no momento',
-        icon: FileSpreadsheet,
-      },
-      {
-        label: 'Coleções lidas',
-        value: String(reportRows.length),
-        note: reportRows.length > 0 ? 'Endpoints consultados com sucesso' : 'Não há dados no momento',
-        icon: LineChart,
-      },
-      {
-        label: 'Vazios detectados',
-        value: String(reportRows.filter((report) => report.status !== 'Disponível').length),
-        note: reportRows.length > 0 ? 'Seções sem registros ainda' : 'Não há dados no momento',
-        icon: FileText,
-      },
-    ],
-    [reportRows],
+  const selectedTurma = data.turmas.find((turma) => turma.id_turma === selectedTurmaId);
+  const turmaAulas = useMemo(
+    () =>
+      data.aulas
+        .filter((aula) => aula.turma.id_turma === selectedTurmaId && isPastOrToday(aula))
+        .sort((left, right) => right.data_aula.localeCompare(left.data_aula)),
+    [data.aulas, selectedTurmaId],
+  );
+  const turmaInscricoes = useMemo(
+    () =>
+      data.inscricoes.filter(
+        (inscricao) =>
+          inscricao.turma.id_turma === selectedTurmaId &&
+          inscricao.status?.toUpperCase() !== 'INATIVO',
+      ),
+    [data.inscricoes, selectedTurmaId],
   );
 
-  const hasData = reportRows.some((report) => report.range !== '0 registros');
+  const alunoOptions = useMemo(() => {
+    if (selectedTurmaId) {
+      return turmaInscricoes
+        .map((inscricao) => inscricao.aluno)
+        .sort((left, right) => left.nome.localeCompare(right.nome, 'pt-BR'));
+    }
+
+    return [...data.alunos].sort((left, right) => left.nome.localeCompare(right.nome, 'pt-BR'));
+  }, [data.alunos, selectedTurmaId, turmaInscricoes]);
+
+  const presencasByAlunoAndAula = useMemo(() => {
+    const map = new Map<string, Presenca>();
+
+    data.presencas.forEach((presenca) => {
+      const key = `${presenca.aluno.id_aluno}:${presenca.aula.id_aula}`;
+      const current = map.get(key);
+
+      if (!current || getAttendanceStatus(current) === 'Ausente') {
+        map.set(key, presenca);
+      }
+    });
+
+    return map;
+  }, [data.presencas]);
+
+  const studentRows = useMemo(
+    () =>
+      turmaInscricoes
+        .map((inscricao) => {
+          const statuses = turmaAulas.map((aula) =>
+            getAttendanceStatus(
+              presencasByAlunoAndAula.get(`${inscricao.aluno.id_aluno}:${aula.id_aula}`),
+            ),
+          );
+          const presencas = statuses.filter(
+            (status) => status === 'Presente' || status === 'Parcial',
+          ).length;
+          const justificadas = statuses.filter((status) => status === 'Justificado').length;
+          const ausencias = statuses.filter((status) => status === 'Ausente').length;
+          const frequencia =
+            turmaAulas.length > 0
+              ? Math.round(((presencas + justificadas) / turmaAulas.length) * 100)
+              : 0;
+
+          return {
+            aluno: inscricao.aluno,
+            presencas,
+            justificadas,
+            ausencias,
+            frequencia,
+          };
+        })
+        .filter(({ aluno }) => {
+          const query = search.trim().toLocaleLowerCase('pt-BR');
+          return (
+            !query ||
+            aluno.nome.toLocaleLowerCase('pt-BR').includes(query) ||
+            aluno.matricula_institucional.toLocaleLowerCase('pt-BR').includes(query)
+          );
+        })
+        .sort((left, right) => left.aluno.nome.localeCompare(right.aluno.nome, 'pt-BR')),
+    [presencasByAlunoAndAula, search, turmaAulas, turmaInscricoes],
+  );
+
+  const validSelectedAlunoId = alunoOptions.some(
+    (aluno) => aluno.id_aluno === selectedAlunoId,
+  )
+    ? selectedAlunoId
+    : '';
+  const selectedAluno = data.alunos.find(
+    (aluno) => aluno.id_aluno === validSelectedAlunoId,
+  );
+  const selectedAlunoRow = studentRows.find(
+    ({ aluno }) => aluno.id_aluno === selectedAlunoId,
+  );
+  const studentHistory = useMemo(
+    () =>
+      selectedAluno
+        ? turmaAulas.map((aula) => {
+            const presenca = presencasByAlunoAndAula.get(
+              `${selectedAluno.id_aluno}:${aula.id_aula}`,
+            );
+
+            return {
+              aula,
+              presenca,
+              status: getAttendanceStatus(presenca),
+            };
+          })
+        : [],
+    [presencasByAlunoAndAula, selectedAluno, turmaAulas],
+  );
+
+  const alunoByRfid = useMemo(
+    () => new Map(data.alunos.map((aluno) => [aluno.rfid_uid, aluno])),
+    [data.alunos],
+  );
+  const turmaAlunoIds = useMemo(
+    () => new Set(turmaInscricoes.map((inscricao) => inscricao.aluno.id_aluno)),
+    [turmaInscricoes],
+  );
+  const turmaDeviceIds = useMemo(
+    () =>
+      new Set(
+        turmaAulas
+          .map((aula) => aula.dispositivo?.id_dispositivo)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    [turmaAulas],
+  );
+  const filteredLogs = useMemo(
+    () =>
+      data.logs
+        .filter((log) => {
+          const aluno = alunoByRfid.get(log.rfid_uid);
+
+          if (viewMode === 'aluno') {
+            return Boolean(selectedAluno && log.rfid_uid === selectedAluno.rfid_uid);
+          }
+
+          return Boolean(
+            (aluno && turmaAlunoIds.has(aluno.id_aluno)) ||
+              (log.dispositivo?.id_dispositivo &&
+                turmaDeviceIds.has(log.dispositivo.id_dispositivo)),
+          );
+        })
+        .sort(
+          (left, right) =>
+            new Date(right.data_hora).getTime() - new Date(left.data_hora).getTime(),
+        ),
+    [alunoByRfid, data.logs, selectedAluno, turmaAlunoIds, turmaDeviceIds, viewMode],
+  );
+
+  const totalExpected = turmaAulas.length * turmaInscricoes.length;
+  const totalAttendance = studentRows.reduce(
+    (total, row) => total + row.presencas + row.justificadas,
+    0,
+  );
+  const averageFrequency =
+    totalExpected > 0 ? Math.round((totalAttendance / totalExpected) * 100) : 0;
+  const reportTitle =
+    viewMode === 'aluno' && selectedAluno
+      ? `Relatório individual - ${selectedAluno.nome}`
+      : `Relatório da turma - ${selectedTurma?.codigo_turma || 'Sem turma'}`;
+
+  function handlePrint() {
+    window.print();
+  }
+
+  if (loading) {
+    return (
+      <Page>
+        <EmptyState
+          title="Carregando relatórios"
+          description="Consolidando turmas, aulas, presenças e logs. Aguarde um momento."
+        />
+      </Page>
+    );
+  }
 
   return (
     <Page>
+      <ReportPrintStyles />
+      <PrintHeader>
+        <strong>SenacPass</strong>
+        <span>{reportTitle}</span>
+        <small>Gerado em {new Date().toLocaleString('pt-BR')}</small>
+      </PrintHeader>
+
       <Header>
         <div>
-          <Eyebrow>Painel de exportação</Eyebrow>
+          <Eyebrow>Frequência e auditoria</Eyebrow>
           <Title>Relatórios</Title>
           <Subtitle>
-            Resumo dos dados que cada endpoint devolve no backend atual.
+            Acompanhe a frequência por turma ou consulte o histórico completo de cada aluno.
           </Subtitle>
         </div>
 
         <Actions>
-          <ActionButton type="button">
-            <Download size={16} />
-            Exportar CSV
+          <ActionButton type="button" onClick={() => void loadReport()}>
+            <RefreshCw size={16} />
+            Atualizar
           </ActionButton>
-          <ActionButton type="button">
+          <ActionButton type="button" onClick={handlePrint}>
+            <Download size={16} />
+            Exportar PDF
+          </ActionButton>
+          <ActionButton type="button" onClick={handlePrint}>
             <Printer size={16} />
             Imprimir
           </ActionButton>
         </Actions>
       </Header>
 
-      <SummaryGrid>
-        {metrics.map((item) => {
-          const Icon = item.icon;
+      {error ? <ErrorMessage>{error}</ErrorMessage> : null}
 
-          return (
-            <SummaryCard key={item.label}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                <SummaryLabel>{item.label}</SummaryLabel>
-                <Icon size={18} />
-              </div>
-              <SummaryValue>{item.value}</SummaryValue>
-              <SummaryNote>{item.note}</SummaryNote>
-            </SummaryCard>
-          );
-        })}
+      <Controls>
+        <ViewTabs aria-label="Tipo de relatório">
+          <ViewTab
+            type="button"
+            $active={viewMode === 'turma'}
+            onClick={() => setViewMode('turma')}
+          >
+            <Users size={16} />
+            Por turma
+          </ViewTab>
+          <ViewTab
+            type="button"
+            $active={viewMode === 'aluno'}
+            onClick={() => setViewMode('aluno')}
+          >
+            <FileText size={16} />
+            Por aluno
+          </ViewTab>
+        </ViewTabs>
+
+        <Control>
+          <span>Turma</span>
+          <select
+            value={selectedTurmaId}
+            onChange={(event) => {
+              setSelectedTurmaId(event.target.value);
+              setSelectedAlunoId('');
+            }}
+          >
+            {data.turmas.length === 0 ? <option value="">Nenhuma turma</option> : null}
+            {data.turmas.map((turma) => (
+              <option key={turma.id_turma} value={turma.id_turma}>
+                {turma.codigo_turma} - {turma.unidade_curricular.nome}
+              </option>
+            ))}
+          </select>
+        </Control>
+
+        {viewMode === 'aluno' ? (
+          <Control>
+            <span>Aluno</span>
+            <select value={validSelectedAlunoId} onChange={(event) => setSelectedAlunoId(event.target.value)}>
+              <option value="">Selecione um aluno</option>
+              {alunoOptions.map((aluno) => (
+                <option key={aluno.id_aluno} value={aluno.id_aluno}>
+                  {aluno.nome} - {aluno.matricula_institucional}
+                </option>
+              ))}
+            </select>
+          </Control>
+        ) : (
+          <SearchControl>
+            <span>Buscar aluno</span>
+            <div>
+              <Search size={16} />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Nome ou matrícula"
+              />
+            </div>
+          </SearchControl>
+        )}
+      </Controls>
+
+      <ReportMeta>
+        <strong>{reportTitle}</strong>
+        <span>
+          {selectedTurma?.unidade_curricular.nome || 'Unidade curricular não informada'} •{' '}
+          {turmaAulas.length} aulas contabilizadas
+        </span>
+      </ReportMeta>
+
+      <SummaryGrid>
+        <SummaryCard>
+          <SummaryLabel>Alunos na turma</SummaryLabel>
+          <SummaryValue>{turmaInscricoes.length}</SummaryValue>
+          <SummaryNote>Inscrições ativas</SummaryNote>
+          <Users size={19} />
+        </SummaryCard>
+        <SummaryCard>
+          <SummaryLabel>Aulas realizadas</SummaryLabel>
+          <SummaryValue>{turmaAulas.length}</SummaryValue>
+          <SummaryNote>Até a data de hoje</SummaryNote>
+          <CalendarCheck size={19} />
+        </SummaryCard>
+        <SummaryCard>
+          <SummaryLabel>
+            {viewMode === 'aluno' ? 'Frequência do aluno' : 'Frequência média'}
+          </SummaryLabel>
+          <SummaryValue>
+            {viewMode === 'aluno' ? selectedAlunoRow?.frequencia || 0 : averageFrequency}%
+          </SummaryValue>
+          <SummaryNote>Presenças e justificativas</SummaryNote>
+          <Activity size={19} />
+        </SummaryCard>
       </SummaryGrid>
 
       <Section>
         <SectionHeader>
-          <SectionTitle>Resumo dos endpoints</SectionTitle>
-          <SectionBadge>
-            <Download size={16} />
-            Contrato real da API
-          </SectionBadge>
+          <SectionTitle>
+            {viewMode === 'turma' ? 'Frequência por aluno' : 'Histórico de aulas'}
+          </SectionTitle>
+          <SectionBadge>{viewMode === 'turma' ? `${studentRows.length} alunos` : selectedAluno?.nome || 'Selecione um aluno'}</SectionBadge>
         </SectionHeader>
 
-        {hasData ? (
+        {viewMode === 'turma' && studentRows.length > 0 ? (
           <TableWrap>
             <Table>
               <thead>
                 <tr>
-                  <th>Recurso</th>
-                  <th>Endpoint</th>
-                  <th>Volume</th>
-                  <th>Camada</th>
-                  <th>Status</th>
+                  <th>Aluno</th>
+                  <th>Matrícula</th>
+                  <th>Presenças</th>
+                  <th>Justificadas</th>
+                  <th>Ausências</th>
+                  <th>Frequência</th>
                 </tr>
               </thead>
               <tbody>
-                {reportRows.map((report) => (
-                  <tr key={report.name}>
+                {studentRows.map((row) => (
+                  <tr key={row.aluno.id_aluno}>
+                    <td><strong>{row.aluno.nome}</strong></td>
+                    <td>{row.aluno.matricula_institucional}</td>
+                    <td>{row.presencas}</td>
+                    <td>{row.justificadas}</td>
+                    <td>{row.ausencias}</td>
                     <td>
-                      <strong>{report.name}</strong>
-                    </td>
-                    <td>{report.type}</td>
-                    <td>{report.range}</td>
-                    <td>{report.owner}</td>
-                    <td>
-                      <Status>{report.status}</Status>
+                      <Progress>
+                        <ProgressBar $value={row.frequencia}><span /></ProgressBar>
+                        <strong>{row.frequencia}%</strong>
+                      </Progress>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </Table>
           </TableWrap>
+        ) : null}
+
+        {viewMode === 'aluno' && selectedAluno ? (
+          <TableWrap>
+            <Table>
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Aula</th>
+                  <th>Entrada</th>
+                  <th>Saída</th>
+                  <th>Status</th>
+                  <th>Justificativa</th>
+                </tr>
+              </thead>
+              <tbody>
+                {studentHistory.map(({ aula, presenca, status }) => (
+                  <tr key={aula.id_aula}>
+                    <td>{formatDate(aula.data_aula)}</td>
+                    <td>{aula.turma.codigo_turma}</td>
+                    <td>{formatTime(presenca?.horario_checkin || null)}</td>
+                    <td>{formatTime(presenca?.horario_checkout || null)}</td>
+                    <td><Status $status={status}>{status}</Status></td>
+                    <td>{presenca?.justificativa_manual || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          </TableWrap>
+        ) : null}
+
+        {(viewMode === 'turma' && studentRows.length === 0) ||
+        (viewMode === 'aluno' && !selectedAluno) ? (
+          <EmptyState
+            title={viewMode === 'aluno' ? 'Selecione um aluno' : 'Nenhum aluno encontrado'}
+            description={
+              viewMode === 'aluno'
+                ? 'Escolha um aluno para consultar sua frequência aula por aula.'
+                : 'A turma selecionada ainda não possui alunos ou não corresponde à busca.'
+            }
+          />
+        ) : null}
+      </Section>
+
+      <Section>
+        <SectionHeader>
+          <SectionTitle>Logs de acesso</SectionTitle>
+          <SectionBadge>
+            <Activity size={15} />
+            {filteredLogs.length} eventos
+          </SectionBadge>
+        </SectionHeader>
+
+        {filteredLogs.length > 0 ? (
+          <LogList>
+            {filteredLogs.map((log) => {
+              const aluno = alunoByRfid.get(log.rfid_uid);
+              const deviceName =
+                log.dispositivo?.nome ||
+                log.dispositivo?.localizacao ||
+                'Dispositivo não informado';
+
+              return (
+                <LogRow key={log.id_log}>
+                  <div>
+                    <LogEvent>{eventLabel(log.tipo_evento)}</LogEvent>
+                    <strong>{aluno?.nome || 'RFID não vinculado a um aluno'}</strong>
+                    <LogMeta>
+                      UID {log.rfid_uid} • {deviceName}
+                    </LogMeta>
+                  </div>
+                  <time>{formatDateTime(log.data_hora)}</time>
+                </LogRow>
+              );
+            })}
+          </LogList>
         ) : (
           <EmptyState
-            title="Não há dados para relatórios no momento"
-            description="Quando os endpoints retornarem registros, o resumo aparecerá aqui."
+            title="Nenhum log encontrado"
+            description="Não há eventos RFID relacionados à seleção atual."
           />
         )}
       </Section>

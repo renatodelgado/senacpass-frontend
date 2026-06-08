@@ -30,6 +30,7 @@ export interface Turma {
 export interface Dispositivo {
   id_dispositivo: string;
   id_hardware: string;
+  nome?: string;
   localizacao: string;
   ip: string;
   status: string;
@@ -82,6 +83,14 @@ export interface LogAcesso {
   tipo_evento: string;
 }
 
+export interface CreateAcessoLogInput {
+  rfid_uid: string;
+  tipo_evento: 'RFID_LEITURA' | 'RFID_IGNORADO_SEM_AULA' | 'JUSTIFICATIVA_MANUAL';
+  data_hora?: string;
+  id_aula?: string;
+  justificativa?: string;
+}
+
 export interface ApiErrorResponse {
   message?: string;
   error?: string;
@@ -110,7 +119,8 @@ export const publicApi = {
     request<Presenca>('post', '/presencas', data),
 
   listAcessoLogs: () => request<LogAcesso[]>('get', '/log-acessos'),
-  createAcessoLog: (data: unknown) => request<LogAcesso>('post', '/log-acessos', data),
+  createAcessoLog: (data: CreateAcessoLogInput) =>
+    request<LogAcesso>('post', '/log-acessos', data),
 };
 
 export const protectedApi = {
