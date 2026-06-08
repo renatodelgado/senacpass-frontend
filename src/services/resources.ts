@@ -185,8 +185,8 @@ export const protectedApi = {
 
   listPresencasByAula: (idAula: string | number) => 
     request<Presenca[]>('get', `/presencas/aula/${idAula}`),
-  createPresenca: (data: { id_aluno: string; id_aula: string; status: string }) =>
-    request<Presenca>('post', '/presencas', data),
+  createManualAbsence: (data: { id_aluno: string; id_aula: string }) =>
+    request<Presenca>('post', '/presencas/manual', data),
   justifyPresenca: (id: string | number, justificativaManual: string) =>
     request<Presenca>('post', `/presencas/${id}/justificativa`, {
       status: 'JUSTIFICADO',

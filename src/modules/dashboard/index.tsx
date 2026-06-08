@@ -225,10 +225,9 @@ export function Dashboard() {
           throw new Error('Aluno sem identificador para criar a presença.');
         }
 
-        const createdPresence = await protectedApi.createPresenca({
+        const createdPresence = await protectedApi.createManualAbsence({
           id_aluno: studentToJustify.studentId,
           id_aula: selectedAulaId,
-          status: 'AUSENTE',
         });
         presenceId = createdPresence.id_presenca;
       }

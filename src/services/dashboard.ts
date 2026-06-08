@@ -380,11 +380,16 @@ function buildPresenceChart(
     .sort((left, right) => getAulaSortKey(left).localeCompare(getAulaSortKey(right)));
 
   const data = ultimasAulas.map((aula) => {
+    const aulaEmAndamento = isAulaInProgress(aula);
     const totalPresentes = new Set(
       todasPresencas
         .filter((presenca) => presenca.aula.id_aula === aula.id_aula)
         .filter((presenca) => alunoIds.has(presenca.aluno.id_aluno))
-        .filter((presenca) => getAttendanceStatus(presenca) === 'Presente')
+        .filter((presenca) =>
+          aulaEmAndamento
+            ? hasCheckIn(presenca) && !isEarlyCheckOut(presenca, aula)
+            : getAttendanceStatus(presenca) === 'Presente',
+        )
         .map((presenca) => presenca.aluno.id_aluno),
     ).size;
 
@@ -396,7 +401,7 @@ function buildPresenceChart(
 
   return {
     title: 'Presença por aula',
-    legendLabel: 'Presenças concluídas',
+    legendLabel: 'Alunos com presença',
     totalStudents: alunoIds.size,
     data,
   };
@@ -621,7 +626,12 @@ export async function loadDashboardData({ professorId, turmaId, selectedAulaId }
     studentList: buildStudentList(safeInscricoes, selectedPresencas),
     presenceChart: buildPresenceChart(
       safeAulasDaTurma,
-      safeTodasPresencas,
+      [
+        ...safeTodasPresencas.filter(
+          (presenca) => presenca.aula.id_aula !== selectedAula.id_aula,
+        ),
+        ...selectedPresencas,
+      ],
       selectedAula,
       safeInscricoes,
     ),
