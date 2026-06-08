@@ -193,6 +193,18 @@ function hasCheckIn(presenca?: Presenca) {
   return !Number.isNaN(new Date(presenca.horario_checkin).getTime());
 }
 
+function hasCheckOut(presenca?: Presenca) {
+  if (!presenca?.horario_checkout) {
+    return false;
+  }
+
+  return !Number.isNaN(new Date(presenca.horario_checkout).getTime());
+}
+
+function formatCount(count: number, singular: string, plural: string) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
 function getCheckInTimestamp(presenca: Presenca) {
   return presenca.horario_checkin
     ? new Date(presenca.horario_checkin).getTime()
@@ -380,20 +392,66 @@ function buildCourseOverview(
 ): CourseOverviewData {
   const alunoIds = new Set(inscricoes.map((inscricao) => inscricao.aluno.id_aluno));
   const totalAlunos = alunoIds.size;
-  const totalPresentes = new Set(
-    presencas
-      .filter((presence) => alunoIds.has(presence.aluno.id_aluno))
-      .filter((presence) => getAttendanceStatus(presence) === 'Presente')
-      .map((presence) => presence.aluno.id_aluno),
-  ).size;
-  const totalParciais = new Set(
-    presencas
-      .filter((presence) => alunoIds.has(presence.aluno.id_aluno))
-      .filter((presence) => getAttendanceStatus(presence) === 'Parcial')
-      .map((presence) => presence.aluno.id_aluno),
-  ).size;
-  const presencePercent = totalAlunos > 0 ? Math.round((totalPresentes / totalAlunos) * 100) : 0;
+  const presencasByAluno = new Map<string, Presenca[]>();
+
+  presencas
+    .filter((presence) => alunoIds.has(presence.aluno.id_aluno))
+    .forEach((presence) => {
+      const alunoId = presence.aluno.id_aluno;
+      const registros = presencasByAluno.get(alunoId) || [];
+      registros.push(presence);
+      presencasByAluno.set(alunoId, registros);
+    });
+
+  const alunosPresentes = new Set<string>();
+  const alunosComCheckInAberto = new Set<string>();
+  const alunosComSaidaAntecipada = new Set<string>();
+  const alunosParciais = new Set<string>();
+
+  presencasByAluno.forEach((registros, alunoId) => {
+    if (registros.some((presence) => getAttendanceStatus(presence) === 'Presente')) {
+      alunosPresentes.add(alunoId);
+    }
+
+    if (
+      registros.some(
+        (presence) =>
+          getAttendanceStatus(presence) === 'Parcial' &&
+          hasCheckIn(presence) &&
+          !hasCheckOut(presence),
+      )
+    ) {
+      alunosComCheckInAberto.add(alunoId);
+    }
+
+    if (
+      registros.some(
+        (presence) =>
+          getAttendanceStatus(presence) === 'Parcial' &&
+          hasCheckOut(presence),
+      )
+    ) {
+      alunosComSaidaAntecipada.add(alunoId);
+    }
+
+    if (registros.some((presence) => getAttendanceStatus(presence) === 'Parcial')) {
+      alunosParciais.add(alunoId);
+    }
+  });
+
   const aulaEmAndamento = isAulaInProgress(aula);
+  const alunosComPresencaAtual = new Set([
+    ...alunosPresentes,
+    ...alunosComCheckInAberto,
+  ]);
+  const totalPresencaExibida = aulaEmAndamento
+    ? alunosComPresencaAtual.size
+    : alunosPresentes.size;
+  const totalSemCheckIn = [...alunoIds].filter(
+    (alunoId) => !presencasByAluno.get(alunoId)?.some((presence) => hasCheckIn(presence)),
+  ).length;
+  const presencePercent =
+    totalAlunos > 0 ? Math.round((totalPresencaExibida / totalAlunos) * 100) : 0;
   const aulaStatus = aulaEmAndamento ? 'Em andamento' : aula.status || 'Selecionada';
 
   const nomeUc = ucDetalhes?.nome || turma.unidade_curricular.nome;
@@ -410,13 +468,16 @@ function buildCourseOverview(
     roomValue: aula.dispositivo?.localizacao || 'Não há dados no momento',
     roomIcon: 'building',
     presenceLabel: aulaEmAndamento ? 'Presença atual' : 'Presença',
-    presenceValue: totalAlunos > 0 ? `${totalPresentes} / ${totalAlunos} alunos` : 'Nenhum aluno inscrito',
+    presenceValue:
+      totalAlunos > 0
+        ? `${totalPresencaExibida} / ${totalAlunos} alunos`
+        : 'Nenhum aluno inscrito',
     progress: presencePercent,
     progressNote:
       totalAlunos > 0
         ? aulaEmAndamento
-          ? `${totalParciais} parciais • ${Math.max(0, totalAlunos - totalPresentes - totalParciais)} sem check-in`
-          : 'Aula histórica selecionada'
+          ? `${formatCount(alunosParciais.size, 'parcial', 'parciais')}: ${formatCount(alunosComCheckInAberto.size, 'com check-in em andamento', 'com check-in em andamento')} • ${formatCount(alunosComSaidaAntecipada.size, 'saiu antes do tempo mínimo', 'saíram antes do tempo mínimo')} • ${formatCount(totalSemCheckIn, 'sem check-in', 'sem check-in')}`
+          : `${formatCount(alunosParciais.size, 'presença parcial', 'presenças parciais')} • ${formatCount(totalSemCheckIn, 'sem check-in', 'sem check-in')}`
         : 'Não há dados no momento',
     optionsLabel: 'Mais opções',
   };
