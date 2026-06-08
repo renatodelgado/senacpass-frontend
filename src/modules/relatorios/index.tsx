@@ -247,7 +247,10 @@ export function Relatorios() {
           const ausencias = statuses.filter((status) => status === 'Ausente').length;
           const frequencia =
             turmaAulas.length > 0
-              ? Math.round(((presencas + justificadas) / turmaAulas.length) * 100)
+              ? Math.round(
+                  ((presencas + justificadas + parciais * 0.5) / turmaAulas.length) *
+                    100,
+                )
               : 0;
 
           return {
@@ -302,7 +305,7 @@ export function Relatorios() {
 
   const totalExpected = turmaAulas.length * turmaInscricoes.length;
   const totalAttendance = studentRows.reduce(
-    (total, row) => total + row.presencas + row.justificadas,
+    (total, row) => total + row.presencas + row.justificadas + row.parciais * 0.5,
     0,
   );
   const averageFrequency =
@@ -588,7 +591,7 @@ export function Relatorios() {
           <SummaryValue>
             {viewMode === 'aluno' ? selectedAlunoRow?.frequencia || 0 : averageFrequency}%
           </SummaryValue>
-          <SummaryNote>Presenças e justificativas</SummaryNote>
+          <SummaryNote>Presenças e justificativas integrais; parciais valem meia aula</SummaryNote>
           <Activity size={19} />
         </SummaryCard>
         </SummaryGrid>
